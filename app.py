@@ -1,103 +1,120 @@
 import streamlit as st
 from fastai.vision.all import *
-from zipfile import ZipFile
-import os, shutil
+import zipfile, os, shutil
 from pathlib import Path
+import tempfile
 
-st.set_page_config(page_title="Trash Classifier Trainer", layout="wide")
-st.title("🗑️ Trash Lid Image Classifier - Train & Test")
+st.set_page_config(layout="wide")
+st.title("🔍 Trash Lid Quality Classifier")
 
-# Set folders
-TRAIN_DIR = Path("train_data")
-TEST_DIR = Path("test_data")
-MODEL_NAME = "trash_model.pkl"
+# Globals
+model_path = Path("model.pkl")
+learner = None
+dls = None
+class_labels = []
 
-# Clean folders
-def reset_folder(path):
-    if path.exists(): shutil.rmtree(path)
-    path.mkdir(parents=True, exist_ok=True)
+# Helper: Extract zip
+@st.cache_resource(show_spinner=False)
+def extract_zip(uploaded_file):
+    temp_dir = tempfile.mkdtemp()
+    with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
+        zip_ref.extractall(temp_dir)
+    return Path(temp_dir)
 
-# Extract zip
-def extract_zip(uploaded_file, dest):
-    reset_folder(dest)
-    with ZipFile(uploaded_file, 'r') as zip_ref:
-        zip_ref.extractall(dest)
+# Helper: Load images from test folder
+def get_images_from_folder(path):
+    return get_image_files(path)
 
-# Load data
-@st.cache_resource
-def load_learner_from_file():
-    if os.path.exists(MODEL_NAME):
-        return load_learner(MODEL_NAME)
-    return None
+# Helper: Visual feedback
+def display_predictions(imgs, preds):
+    cols = st.columns(3)
+    for i, (img, pred) in enumerate(zip(imgs, preds)):
+        with cols[i % 3]:
+            st.image(img, width=300, caption=f"Predicted: {pred}")
+            correct = st.radio(
+                f"Was this correct?",
+                ["Yes", "No - Should be good", "No - Should be bad"],
+                key=str(img),
+                horizontal=True
+            )
+            if correct != "Yes":
+                corrected_label = "good" if "good" in correct else "bad"
+                shutil.copy(img, Path("./feedback")/corrected_label)
 
-# Create DataLoaders
-def get_dls(path, bs=4):
+# Train model
+st.header("📦 Upload Training Dataset (.zip)")
+train_zip = st.file_uploader("Upload a zip with 'good' and 'bad' folders", type="zip", key="train")
+
+if train_zip:
+    train_dir = extract_zip(train_zip)
+    folder = next(train_dir.iterdir()) if len(list(train_dir.iterdir())) == 1 else train_dir
+    st.success(f"✅ Found training images in: {folder.name}")
+    
+    def label_func(fp): return fp.parent.name
     dblock = DataBlock(
         blocks=(ImageBlock, CategoryBlock),
         get_items=get_image_files,
-        get_y=parent_label,
-        splitter=RandomSplitter(valid_pct=0.2, seed=42),
+        splitter=RandomSplitter(seed=42),
+        get_y=label_func,
         item_tfms=Resize(224)
     )
-    return dblock.dataloaders(path, bs=bs)
+    dls = dblock.dataloaders(folder, bs=4)
+    class_labels = dls.vocab
 
-# Sidebar
-with st.sidebar:
-    st.header("1️⃣ Upload Training Data (.zip)")
-    train_zip = st.file_uploader("Upload ZIP (containing good/ and bad/ folders inside a folder)", type=["zip"])
-    if st.button("Train Model") and train_zip:
-        extract_zip(train_zip, TRAIN_DIR)
-        subfolder = next(TRAIN_DIR.iterdir()) if any(TRAIN_DIR.iterdir()) else TRAIN_DIR
-        dls = get_dls(subfolder)
-        learn = vision_learner(dls, resnet18, metrics=accuracy)
-        with st.spinner("Training..."):
-            learn.fine_tune(3)
-        learn.export(MODEL_NAME)
-        st.success("Model trained and saved!")
+    learner = vision_learner(dls, resnet18, metrics=accuracy)
 
-    st.header("2️⃣ Upload Test Data (.zip)")
-    test_zip = st.file_uploader("Upload ZIP with test images (in good/ and bad/ folders)", type=["zip"], key="test")
-    run_predictions = st.button("Run Predictions")
+    with st.spinner("Training the model..."):
+        learner.fine_tune(3)
+        learner.export(model_path)
+    st.success("✅ Model trained and saved!")
 
-# Main App
-learn = load_learner_from_file()
-if run_predictions and test_zip:
-    if not learn:
-        st.error("Train a model first!")
+# Predict from test zip
+st.header("🧪 Upload Test Dataset (.zip)")
+test_zip = st.file_uploader("Upload a test zip with images", type="zip", key="test")
+
+if test_zip:
+    if not model_path.exists():
+        st.warning("Please train a model first.")
     else:
-        extract_zip(test_zip, TEST_DIR)
-        test_folder = next(TEST_DIR.iterdir()) if any(TEST_DIR.iterdir()) else TEST_DIR
-        test_images = get_image_files(test_folder)
+        test_dir = extract_zip(test_zip)
+        test_folder = next(test_dir.iterdir()) if len(list(test_dir.iterdir())) == 1 else test_dir
 
-        preds = []
-        for img in test_images:
-            pred, _, probs = learn.predict(img)
-            preds.append((img, pred, probs))
+        if learner is None:
+            learner = load_learner(model_path)
 
-        st.subheader("🔍 Results - Review Predictions")
-        correct_labels = []
-        for img, pred, probs in preds:
-            col1, col2 = st.columns([1, 2])
-            with col1:
-                st.image(img, width=224, caption=f"Predicted: {pred}")
-            with col2:
-                true_label = st.radio(
-                    f"What is the correct label for `{img.name}`?", ["good", "bad"],
-                    index=["good", "bad"].index(pred), key=str(img)
-                )
-                correct_labels.append((img, true_label))
+        test_imgs = get_images_from_folder(test_folder)
+        preds = [learner.predict(img)[0] for img in test_imgs]
 
-        if st.button("✅ Retrain with Corrections"):
-            # Move corrected images into TRAIN_DIR structure
-            for img, label in correct_labels:
-                dest_folder = TRAIN_DIR / "corrected" / label
-                dest_folder.mkdir(parents=True, exist_ok=True)
-                shutil.copy(img, dest_folder / img.name)
+        st.header("🖼️ Predictions")
+        display_predictions(test_imgs, preds)
 
-            all_train_data = TRAIN_DIR / "corrected"
-            dls = get_dls(all_train_data)
-            learn = vision_learner(dls, resnet18, metrics=accuracy)
-            with st.spinner("Retraining with feedback..."):
-                learn.fine_tune(2)
-            learn.export(MODEL_NAME)
-            st.success("Model retrained with corrected labels!")
+# Retrain from feedback
+if Path("./feedback").exists():
+    st.header("🔁 Improve with Feedback")
+    if st.button("Retrain with Feedback"):
+        corrected_path = Path("./feedback")
+        if len(list(corrected_path.rglob("*.jpg"))) > 1:
+            dblock_feedback = DataBlock(
+                blocks=(ImageBlock, CategoryBlock),
+                get_items=get_image_files,
+                splitter=RandomSplitter(seed=24),
+                get_y=label_func,
+                item_tfms=Resize(224)
+            )
+            dls_feedback = dblock_feedback.dataloaders(corrected_path, bs=4)
+            learner = vision_learner(dls_feedback, resnet18, metrics=accuracy)
+            learner.fine_tune(2)
+            learner.export(model_path)
+            shutil.rmtree(corrected_path)
+            st.success("✅ Model updated with feedback!")
+        else:
+            st.warning("Not enough feedback examples to retrain.")
+
+# Generate visual summary
+if learner and st.button("📸 Show Visual Summary"):
+    from fastai.vision.utils import plot_top_losses
+    interp = ClassificationInterpretation.from_learner(learner)
+    interp.plot_confusion_matrix(figsize=(4,4))
+    st.pyplot()
+    st.set_option('deprecation.showPyplotGlobalUse', False)
+    st.info("This summary shows where the model struggles the most.")
