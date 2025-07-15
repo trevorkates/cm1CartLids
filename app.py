@@ -25,7 +25,7 @@ image_path = os.path.join(IMAGE_FOLDER, selected_file)
 image = Image.open(image_path)
 st.image(image, caption=selected_file, use_container_width=True)
 
-# === Tolerance Control (moved here)
+# === Tolerance Control (after preview)
 tolerance = st.slider("🔧 Defect Tolerance", min_value=0, max_value=10, value=5,
                       help="0 = strict (small issues cause REJECT), 10 = lenient (minor defects allowed)")
 
@@ -45,13 +45,6 @@ drive_ids = {
     "GoodBrand.jpeg": "1GCsMHYybyLNT_HVDXz4w17NFPTKmrNVt",
     "BadStreaks.jpeg": "1TV8vH_igEnZ-4027AbEqbpIkCwg5hCzE"
 }
-
-examples = []
-for filename, explanation in example_images.items():
-    file_id = drive_ids.get(filename)
-    if file_id:
-        examples.append({"type": "image_url", "image_url": {"url": f"https://drive.google.com/uc?id={file_id}"}})
-        examples.append({"type": "text", "text": explanation})
 
 # === GPT Prompt ===
 prompt = f"""
@@ -77,25 +70,30 @@ if st.button("Send to GPT-4o"):
 
     with st.spinner("Sending image to GPT-4o..."):
         try:
-          response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-            {"role": "system", "content": prompt},
-            # Few-shot user examples
-            *[
-            {"role": "user", "content": [
-                {"type": "image_url", "image_url": {"url": f"https://drive.google.com/uc?id={drive_ids[filename]}"}},
-                {"type": "text", "text": explanation}
-            ]}
-            for filename, explanation in example_images.items()
-        ],
-        # User test image
-        {"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
-        ]}
-    ]
-)
-
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": prompt},
+                    # Few-shot examples as full user messages
+                    *[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "image_url", "image_url": {"url": f"https://drive.google.com/uc?id={drive_ids[filename]}"}},
+                                {"type": "text", "text": explanation}
+                            ]
+                        }
+                        for filename, explanation in example_images.items()
+                    ],
+                    # User query image
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                        ]
+                    }
+                ]
+            )
             content = response.choices[0].message.content.strip()
             st.markdown("### 🧠 GPT-4o Decision")
             if "REJECT" in content.upper():
