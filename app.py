@@ -6,7 +6,7 @@ from PIL import Image
 
 # === Config ===
 IMAGE_FOLDER = "images"  # Folder in your repo or local for testing
-openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.api_key = os.getenv("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")
 
 st.set_page_config(page_title="Trash Lid Classifier", layout="centered")
 
