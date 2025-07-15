@@ -5,8 +5,8 @@ import os
 from PIL import Image
 
 # === Config ===
-IMAGE_FOLDER = "images"  # Folder in your repo or local for testing
-openai.api_key = os.getenv("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")
+IMAGE_FOLDER = "images"  # Make sure this folder exists in your repo
+client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.set_page_config(page_title="Trash Lid Classifier", layout="centered")
 
@@ -23,7 +23,7 @@ selected_file = st.selectbox("Choose an image to evaluate", images)
 image_path = os.path.join(IMAGE_FOLDER, selected_file)
 
 image = Image.open(image_path)
-st.image(image, caption=selected_file, use_column_width=True)
+st.image(image, caption=selected_file, use_container_width=True)
 
 if st.button("Send to GPT-4o"):
     with open(image_path, "rb") as img_file:
@@ -31,7 +31,7 @@ if st.button("Send to GPT-4o"):
 
     with st.spinner("Sending image to GPT-4o..."):
         try:
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {"role": "user", "content": [
@@ -40,7 +40,7 @@ if st.button("Send to GPT-4o"):
                     ]}
                 ]
             )
-            content = response["choices"][0]["message"]["content"].strip()
+            content = response.choices[0].message.content.strip()
             st.markdown("### 🧠 GPT-4o Decision")
             if "REJECT" in content.upper():
                 st.error(content)
@@ -50,4 +50,4 @@ if st.button("Send to GPT-4o"):
                 st.info(content)
 
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"❌ Error: {e}")
