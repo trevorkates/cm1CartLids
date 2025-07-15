@@ -32,7 +32,7 @@ if st.button("Send to GPT-4o"):
     with st.spinner("Sending image to GPT-4o..."):
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "user", "content": [
                         {"type": "text", "text": "This is a photo of a trash can lid. Decide if the lid should be ACCEPTED or REJECTED based on part correctness, print quality, and branding. Respond with a decision and a short explanation."},
