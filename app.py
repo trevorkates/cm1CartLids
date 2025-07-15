@@ -77,16 +77,25 @@ if st.button("Send to GPT-4o"):
 
     with st.spinner("Sending image to GPT-4o..."):
         try:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": prompt},
-                    *examples,
-                    {"role": "user", "content": [
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
-                    ]}
-                ]
-            )
+          response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+            {"role": "system", "content": prompt},
+            # Few-shot user examples
+            *[
+            {"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": f"https://drive.google.com/uc?id={drive_ids[filename]}"}},
+                {"type": "text", "text": explanation}
+            ]}
+            for filename, explanation in example_images.items()
+        ],
+        # User test image
+        {"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+        ]}
+    ]
+)
+
             content = response.choices[0].message.content.strip()
             st.markdown("### 🧠 GPT-4o Decision")
             if "REJECT" in content.upper():
