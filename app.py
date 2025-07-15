@@ -13,10 +13,6 @@ st.set_page_config(page_title="Trash Lid Classifier", layout="centered")
 st.title("♻️ Trash Can Lid Inspector")
 st.write("Select a lid image and send it to GPT-4o to determine if it's ACCEPTED or REJECTED.")
 
-# === Tolerance Control ===
-tolerance = st.slider("🔧 Defect Tolerance", min_value=0, max_value=10, value=5,
-                      help="0 = strict (small issues cause REJECT), 10 = lenient (minor defects allowed)")
-
 # === File selection ===
 images = [f for f in os.listdir(IMAGE_FOLDER) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
 if not images:
@@ -28,6 +24,10 @@ image_path = os.path.join(IMAGE_FOLDER, selected_file)
 
 image = Image.open(image_path)
 st.image(image, caption=selected_file, use_container_width=True)
+
+# === Tolerance Control (moved here)
+tolerance = st.slider("🔧 Defect Tolerance", min_value=0, max_value=10, value=5,
+                      help="0 = strict (small issues cause REJECT), 10 = lenient (minor defects allowed)")
 
 # === Few-shot examples from Google Drive ===
 example_images = {
