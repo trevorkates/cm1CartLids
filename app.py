@@ -48,19 +48,30 @@ drive_ids = {
 
 # === GPT Prompt ===
 prompt = f"""
-You are an expert inspector of plastic trash can lids.
-Classify each lid as either ACCEPT or REJECT.
+You are an expert inspector of plastic trash can lids, using the Quality Acceptability Standard for Flash and Branding to classify lids as either ACCEPT or REJECT.
+
+Your inspection must follow these rules:
+
+FLASH:
+- REJECT if flash is sharp or thick on interaction areas (like handles)
+- REJECT if flash affects part function (nesting, latching, bottle fit)
+- REJECT if flash causes the part to rock or not sit flat
+- REJECT if flash extends past gridwork
+- ACCEPT small gridwork flash that does not extend beyond the pattern
+- In non-interaction areas: ACCEPT only if flash is small, non-sharp, and not obvious
+
+BRANDING:
+- REJECT if branding or logo is unreadable or entire letters are missing
+- ACCEPT but fix if branding has small missing spots (< ¼ inch), light spots, or heavy press
+- REJECT overbranding > ¼ inch or with multiple overbrand spots
+- REJECT alignment that is crooked by more than 45°
+- ACCEPT minor crooked alignment or minor light spot as long as it’s readable
 
 Use this tolerance level (0–10): {tolerance}
-- 0 = strict (even small defects cause REJECT)
-- 10 = lenient (only major issues = REJECT)
+- 0 = strict (reject most minor issues)
+- 10 = lenient (allow more minor defects)
 
-Rules:
-- ACCEPT if branding and IML print are clear, centered, and legible
-- Minor defects (scuffs, small dirt, slight misalignment) are OK
-- REJECT if branding is missing, warped, unreadable, or severely off-center
-
-Respond ONLY with ACCEPT or REJECT and a short reason.
+Respond ONLY with ACCEPT or REJECT and a short reason based on these rules.
 """
 
 # === Send to GPT ===
